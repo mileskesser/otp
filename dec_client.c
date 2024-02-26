@@ -9,7 +9,7 @@
 
 void error(const char *msg) {
     perror(msg);
-    exit(0);
+    exit(1); // Exiting here for simplicity, but consider graceful resource cleanup in production code
 }
 
 void readFileAndSend(int sockfd, const char* filename) {
@@ -26,16 +26,22 @@ void readFileAndSend(int sockfd, const char* filename) {
 
     // Allocate memory for the entire content
     char *buffer = malloc(sizeof(char) * (bufsize + 1));
+    if (buffer == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        fclose(file);
+        exit(1);
+    }
 
     // Read the file into memory
     size_t newLen = fread(buffer, sizeof(char), bufsize, file);
-    if (ferror(file) != 0) {
+    if (ferror(file)) {
         fputs("Error reading file", stderr);
+        free(buffer);
+        fclose(file);
+        exit(1);
     } else {
-        buffer[newLen++] = '\0'; // Just to be safe.
+        buffer[newLen++] = '\0'; // Null-terminate the buffer
     }
-
-    fclose(file);
 
     // Send file content to server
     int n = write(sockfd, buffer, strlen(buffer));
@@ -44,6 +50,7 @@ void readFileAndSend(int sockfd, const char* filename) {
     }
 
     free(buffer);
+    fclose(file);
 }
 
 int main(int argc, char *argv[]) {
@@ -54,7 +61,7 @@ int main(int argc, char *argv[]) {
     char buffer[256];
     if (argc < 4) {
        fprintf(stderr,"usage %s ciphertext key port\n", argv[0]);
-       exit(0);
+       exit(1);
     }
 
     portno = atoi(argv[3]);
@@ -64,7 +71,7 @@ int main(int argc, char *argv[]) {
     server = gethostbyname("localhost");
     if (server == NULL) {
         fprintf(stderr,"ERROR, no such host\n");
-        exit(0);
+        exit(1);
     }
 
     bzero((char *) &serv_addr, sizeof(serv_addr));
@@ -90,5 +97,4 @@ int main(int argc, char *argv[]) {
 
     close(sockfd);
     return 0;
-
 }
