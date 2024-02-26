@@ -6,26 +6,46 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define MAX_CONNECTIONS 5  // Maximum number of concurrent connections
+#define MAX_CONNECTIONS 5
 
 void error(const char *msg) {
     perror(msg);
     exit(1);
 }
 
+void otp_encrypt_decrypt(char *text, char *key, char *result, int length, int encrypt) {
+    for (int i = 0; i < length; ++i) {
+        int textVal = (text[i] == ' ') ? 26 : text[i] - 'A';
+        int keyVal = (key[i] == ' ') ? 26 : key[i] - 'A';
+        int resultVal = encrypt ? (textVal + keyVal) % 27 : (textVal - keyVal + 27) % 27;
+        result[i] = (resultVal == 26) ? ' ' : 'A' + resultVal;
+    }
+    result[length] = '\0';
+}
+
 void handleConnection(int sock) {
-    int n;
     char buffer[256];
-    
-    // Example of receiving plaintext and a key. You need to implement actual logic.
+    char key[256];
+    char result[256];
     bzero(buffer, 256);
-    n = read(sock, buffer, 255);
+    bzero(key, 256);
+
+    // Example of receiving plaintext. Implement actual logic for your assignment.
+    int n = read(sock, buffer, 255);
     if (n < 0) error("ERROR reading from socket");
-    printf("Received message: %s\n", buffer);
     
-    // Here, you would add the encryption logic and then send back the ciphertext
-    
-    close(sock); // Close this connection socket
+    // Assuming the key is sent immediately after the plaintext
+    n = read(sock, key, 255);
+    if (n < 0) error("ERROR reading from socket");
+
+    // Perform encryption
+    otp_encrypt_decrypt(buffer, key, result, strlen(buffer), 1); // 1 for encryption
+
+    // Send result back to client
+    n = write(sock, result, strlen(result));
+    if (n < 0) error("ERROR writing to socket");
+
+    close(sock); // Close connection socket
 }
 
 int main(int argc, char *argv[]) {
@@ -68,10 +88,10 @@ int main(int argc, char *argv[]) {
             handleConnection(newsockfd);
             exit(0);
         } else {
-            close(newsockfd);  // Parent doesn't need this
+            close(newsockfd);
         }
     }
 
-    close(sockfd);  // Close the listening socket
+    close(sockfd);
     return 0; 
 }

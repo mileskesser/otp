@@ -11,10 +11,9 @@
 
 void error(const char *msg) {
     perror(msg);
-    exit(1); // Exit code 1 for general errors
+    exit(1);
 }
 
-// Function to read the content of a file
 int readFile(const char *filename, char **buffer) {
     FILE *f = fopen(filename, "r");
     if (!f) {
@@ -34,7 +33,7 @@ int readFile(const char *filename, char **buffer) {
 
     fread(*buffer, 1, length, f);
     fclose(f);
-    (*buffer)[length] = '\0'; // Ensure null-termination
+    (*buffer)[length] = '\0';
 
     return length;
 }
@@ -81,7 +80,7 @@ int main(int argc, char *argv[]) {
     // Validate key length
     if (keyLength < plaintextLength) {
         fprintf(stderr, "Error: key '%s' is too short\n", argv[2]);
-        exit(1); // Exit code 1 for key too short
+        exit(1);
     }
 
     // Send plaintext and key to server
@@ -100,5 +99,5 @@ int main(int argc, char *argv[]) {
     close(sockfd);
     free(plaintext);
     free(key);
-    return 0; // Exit code 0 for successful run
+    return 0;
 }

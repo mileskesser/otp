@@ -1,19 +1,22 @@
-all: keygen enc_client enc_server dec_client dec_server
+CC = gcc
+CFLAGS = -Wall -g
 
-keygen: keygen.c
-	gcc -o keygen keygen.c
-
-enc_client: enc_client.c
-	gcc -o enc_client enc_client.c
+all: enc_server enc_client dec_server dec_client keygen
 
 enc_server: enc_server.c
-	gcc -o enc_server enc_server.c
+	$(CC) $(CFLAGS) -o enc_server enc_server.c
 
-dec_client: dec_client.c
-	gcc -o dec_client dec_client.c
+enc_client: enc_client.c
+	$(CC) $(CFLAGS) -o enc_client enc_client.c
 
 dec_server: dec_server.c
-	gcc -o dec_server dec_server.c
+	$(CC) $(CFLAGS) -o dec_server dec_server.c
+
+dec_client: dec_client.c
+	$(CC) $(CFLAGS) -o dec_client dec_client.c
+
+keygen: keygen.c
+	$(CC) $(CFLAGS) -o keygen keygen.c
 
 clean:
-	rm -f keygen enc_client enc_server dec_client dec_server
+	rm -f enc_server enc_client dec_server dec_client keygen

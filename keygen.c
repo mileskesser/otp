@@ -4,12 +4,10 @@
 
 void generateKey(int length) {
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
-    const int charsetSize = sizeof(charset) - 1;
-    
-    srand(time(NULL)); // Seed the random number generator
+    srand(time(NULL)); // Ensure randomness
 
-    for(int i = 0; i < length; i++) {
-        printf("%c", charset[rand() % charsetSize]);
+    for(int i = 0; i < length; ++i) {
+        printf("%c", charset[rand() % (sizeof(charset) - 1)]);
     }
     printf("\n");
 }

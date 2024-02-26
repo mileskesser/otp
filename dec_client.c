@@ -5,11 +5,47 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h>
+#include <netdb.h> 
+
+//
 
 void error(const char *msg) {
     perror(msg);
     exit(0);
+}
+
+void readFileAndSend(int sockfd, const char* filename) {
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        fprintf(stderr, "Could not open file %s\n", filename);
+        exit(1);
+    }
+
+    // Find out the size of the file
+    fseek(file, 0L, SEEK_END);
+    long bufsize = ftell(file);
+    fseek(file, 0L, SEEK_SET);
+
+    // Allocate memory for the entire content
+    char *buffer = malloc(sizeof(char) * (bufsize + 1));
+
+    // Read the file into memory
+    size_t newLen = fread(buffer, sizeof(char), bufsize, file);
+    if (ferror(file) != 0) {
+        fputs("Error reading file", stderr);
+    } else {
+        buffer[newLen++] = '\0'; // Just to be safe.
+    }
+
+    fclose(file);
+
+    // Send file content to server
+    int n = write(sockfd, buffer, strlen(buffer));
+    if (n < 0) {
+        error("ERROR writing to socket");
+    }
+
+    free(buffer);
 }
 
 int main(int argc, char *argv[]) {
@@ -43,32 +79,12 @@ int main(int argc, char *argv[]) {
     if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
 
-    // Read ciphertext from file
-    FILE *ciphertextFile = fopen(argv[1], "r");
-    if (!ciphertextFile) error("ERROR opening ciphertext file");
-    bzero(buffer,256);
-    fread(buffer, 255, 1, ciphertextFile);
-    fclose(ciphertextFile);
+    // Send ciphertext and key to server
+    readFileAndSend(sockfd, argv[1]); // Send ciphertext
+    readFileAndSend(sockfd, argv[2]); // Send key
 
-    // Send ciphertext to the server
-    n = write(sockfd, buffer, strlen(buffer));
-    if (n < 0) 
-         error("ERROR writing to socket");
-
-    // Read key from file
-    FILE *keyFile = fopen(argv[2], "r");
-    if (!keyFile) error("ERROR opening key file");
-    bzero(buffer,256);
-    fread(buffer, 255, 1, keyFile);
-    fclose(keyFile);
-
-    // Send key to the server
-    n = write(sockfd, buffer, strlen(buffer));
-    if (n < 0) 
-         error("ERROR writing to socket");
-
-    // Receive decrypted plaintext from the server
-    bzero(buffer,256);
+    // Receive decrypted plaintext from server
+    bzero(buffer, 256);
     n = read(sockfd, buffer, 255);
     if (n < 0) 
          error("ERROR reading from socket");
@@ -76,4 +92,5 @@ int main(int argc, char *argv[]) {
 
     close(sockfd);
     return 0;
+
 }
