@@ -2,9 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <signal.h>
+
 
 #define MAX_CONNECTIONS 5
 
@@ -13,39 +14,34 @@ void error(const char *msg) {
     exit(1);
 }
 
-void otp_encrypt_decrypt(char *text, char *key, char *result, int length, int encrypt) {
-    for (int i = 0; i < length; ++i) {
-        int textVal = (text[i] == ' ') ? 26 : text[i] - 'A';
-        int keyVal = (key[i] == ' ') ? 26 : key[i] - 'A';
-        int resultVal = encrypt ? (textVal + keyVal) % 27 : (textVal - keyVal + 27) % 27;
-        result[i] = (resultVal == 26) ? ' ' : 'A' + resultVal;
+void custom_encrypt(char *plaintext, char *key, char *ciphertext);
+
+
+void custom_encrypt(char *plaintext, char *key, char *ciphertext) {
+    int i, p, k;
+    for (i = 0; plaintext[i] != '\0' && key[i] != '\0'; i++) {
+        
+        p = (plaintext[i] == ' ') ? 26 : plaintext[i] - 'A';
+        k = (key[i] == ' ') ? 26 : key[i] - 'A';
+        
+        int mod = (p + k) % 27;
+        ciphertext[i] = (mod == 26) ? ' ' : mod + 'A';
     }
-    result[length] = '\0';
+    ciphertext[i] = '\0'; 
 }
 
-void handleConnection(int sock) {
+
+void handle_connection(int client_socket) {
     char buffer[256];
     char key[256];
-    char result[256];
-    bzero(buffer, 256);
-    bzero(key, 256);
+    char ciphertext[256];
 
-    // Example of receiving plaintext. Implement actual logic for your assignment.
-    int n = read(sock, buffer, 255);
-    if (n < 0) error("ERROR reading from socket");
-    
-    // Assuming the key is sent immediately after the plaintext
-    n = read(sock, key, 255);
-    if (n < 0) error("ERROR reading from socket");
+    read(client_socket, buffer, 255);
+    read(client_socket, key, 255);
+    custom_encrypt(buffer, key, ciphertext);
 
-    // Perform encryption
-    otp_encrypt_decrypt(buffer, key, result, strlen(buffer), 1); // 1 for encryption
-
-    // Send result back to client
-    n = write(sock, result, strlen(result));
-    if (n < 0) error("ERROR writing to socket");
-
-    close(sock); // Close connection socket
+    write(client_socket, ciphertext, strlen(ciphertext));
+    close(client_socket);
 }
 
 int main(int argc, char *argv[]) {
@@ -54,14 +50,14 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serv_addr, cli_addr;
 
     if (argc < 2) {
-        fprintf(stderr, "ERROR, no port provided\n");
+        fprintf(stderr,"ERROR, no port provided\n");
         exit(1);
     }
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) 
         error("ERROR opening socket");
-    
+
     bzero((char *) &serv_addr, sizeof(serv_addr));
     portno = atoi(argv[1]);
 
@@ -71,7 +67,7 @@ int main(int argc, char *argv[]) {
 
     if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
         error("ERROR on binding");
-    
+
     listen(sockfd, MAX_CONNECTIONS);
     clilen = sizeof(cli_addr);
 
@@ -79,17 +75,16 @@ int main(int argc, char *argv[]) {
         newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
         if (newsockfd < 0) 
             error("ERROR on accept");
-        
+
         pid = fork();
         if (pid < 0)
             error("ERROR on fork");
         if (pid == 0)  {
             close(sockfd);
-            handleConnection(newsockfd);
+            handle_connection(newsockfd);
             exit(0);
-        } else {
-            close(newsockfd);
         }
+        else close(newsockfd);
     }
 
     close(sockfd);
