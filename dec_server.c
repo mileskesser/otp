@@ -31,7 +31,6 @@ void handle_connection(int client_socket) {
 
     read(client_socket, buffer, 255);
     read(client_socket, key, 255);
-
     decrypt(buffer, key, plaintext);
 
     write(client_socket, plaintext, strlen(plaintext));

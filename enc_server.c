@@ -6,7 +6,6 @@
 #include <netinet/in.h>
 #include <signal.h>
 
-
 #define MAX_CONNECTIONS 5
 
 void error(const char *msg) {
@@ -14,22 +13,16 @@ void error(const char *msg) {
     exit(1);
 }
 
-void custom_encrypt(char *plaintext, char *key, char *ciphertext);
-
-
 void custom_encrypt(char *plaintext, char *key, char *ciphertext) {
     int i, p, k;
     for (i = 0; plaintext[i] != '\0' && key[i] != '\0'; i++) {
-        
         p = (plaintext[i] == ' ') ? 26 : plaintext[i] - 'A';
         k = (key[i] == ' ') ? 26 : key[i] - 'A';
-        
         int mod = (p + k) % 27;
         ciphertext[i] = (mod == 26) ? ' ' : mod + 'A';
     }
-    ciphertext[i] = '\0'; 
+    ciphertext[i] = '\0';
 }
-
 
 void handle_connection(int client_socket) {
     char buffer[256];
@@ -45,7 +38,7 @@ void handle_connection(int client_socket) {
 }
 
 int main(int argc, char *argv[]) {
-    int sockfd, newsockfd, portno, pid;
+    int sockfd, newsockfd, portno;
     socklen_t clilen;
     struct sockaddr_in serv_addr, cli_addr;
 
@@ -76,7 +69,7 @@ int main(int argc, char *argv[]) {
         if (newsockfd < 0) 
             error("ERROR on accept");
 
-        pid = fork();
+        int pid = fork();
         if (pid < 0)
             error("ERROR on fork");
         if (pid == 0)  {
