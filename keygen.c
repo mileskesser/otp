@@ -4,7 +4,7 @@
 
 void generateKey(int length) {
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
-    srand(time(NULL)); 
+    srand(time(NULL)); // Ensure randomness
 
     for(int i = 0; i < length; ++i) {
         printf("%c", charset[rand() % (sizeof(charset) - 1)]);

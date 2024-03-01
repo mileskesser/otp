@@ -2,39 +2,46 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <signal.h>
-
-#define MAX_CONNECTIONS 5
 
 void error(const char *msg) {
     perror(msg);
     exit(1);
 }
 
-void decrypt(char *ciphertext, char *key, char *plaintext) {
-    int i, c, k;
-    for (i = 0; ciphertext[i] != '\0' && key[i] != '\0'; i++) {
-        c = (ciphertext[i] == ' ') ? 26 : ciphertext[i] - 'A';
-        k = (key[i] == ' ') ? 26 : key[i] - 'A';
-        int mod = (c - k + 27) % 27;
-        plaintext[i] = (mod == 26) ? ' ' : mod + 'A';
+void otp_encrypt_decrypt(char *text, char *key, char *result, int length, int encrypt) {
+    for (int i = 0; i < length; ++i) {
+        int textVal = (text[i] == ' ') ? 26 : text[i] - 'A';
+        int keyVal = (key[i] == ' ') ? 26 : key[i] - 'A';
+        int resultVal = encrypt ? (textVal + keyVal) % 27 : (textVal - keyVal + 27) % 27;
+        result[i] = (resultVal == 26) ? ' ' : 'A' + resultVal;
     }
-    plaintext[i] = '\0';
+    result[length] = '\0';
 }
 
-void handle_connection(int client_socket) {
-    char buffer[256];
-    char key[256];
-    char plaintext[256];
+void handleConnection(int sock) {
+    char ciphertext[256], key[256], plaintext[256];
+    bzero(ciphertext, 256);
+    bzero(key, 256);
 
-    read(client_socket, buffer, 255);
-    read(client_socket, key, 255);
-    decrypt(buffer, key, plaintext);
+    // Read ciphertext from client
+    int n = read(sock, ciphertext, 255);
+    if (n < 0) error("ERROR reading from socket");
+    
+    // Read key from client
+    n = read(sock, key, 255);
+    if (n < 0) error("ERROR reading from socket");
 
-    write(client_socket, plaintext, strlen(plaintext));
-    close(client_socket);
+    // Perform decryption
+    otp_encrypt_decrypt(ciphertext, key, plaintext, strlen(ciphertext), 0); // 0 for decryption
+
+    // Send plaintext back to client
+    n = write(sock, plaintext, strlen(plaintext));
+    if (n < 0) error("ERROR writing to socket");
+
+    close(sock);
 }
 
 int main(int argc, char *argv[]) {
@@ -43,14 +50,14 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serv_addr, cli_addr;
 
     if (argc < 2) {
-        fprintf(stderr,"ERROR, no port provided\n");
+        fprintf(stderr, "ERROR, no port provided\n");
         exit(1);
     }
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) 
         error("ERROR opening socket");
-
+    
     bzero((char *) &serv_addr, sizeof(serv_addr));
     portno = atoi(argv[1]);
 
@@ -60,24 +67,25 @@ int main(int argc, char *argv[]) {
 
     if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
         error("ERROR on binding");
-
-    listen(sockfd, MAX_CONNECTIONS);
+    
+    listen(sockfd, 5);
     clilen = sizeof(cli_addr);
 
     while (1) {
         newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
         if (newsockfd < 0) 
             error("ERROR on accept");
-
+        
         int pid = fork();
         if (pid < 0)
             error("ERROR on fork");
-        if (pid == 0)  {
+        if (pid == 0) {
             close(sockfd);
-            handle_connection(newsockfd);
+            handleConnection(newsockfd);
             exit(0);
+        } else {
+            close(newsockfd);
         }
-        else close(newsockfd);
     }
 
     close(sockfd);
