@@ -70,6 +70,8 @@ int main(int argc, char *argv[]) {
         error("Error: key is too short", 1);
     }
 
+
+
     socketFD = socket(AF_INET, SOCK_STREAM, 0);
     if (socketFD < 0) {
         error("CLIENT: ERROR opening socket", 2);
