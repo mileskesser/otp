@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -6,20 +5,29 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h> 
+#include <netdb.h>
 
-#define BUFFER_SIZE 1024
-
-void error(const char *msg) {
-    perror(msg);
-    exit(1);
+void error(const char *msg, int exitCode) {
+    fprintf(stderr, "%s\n", msg); 
+    exit(exitCode);
 }
 
-int readFile(const char *filename, char **buffer) {
+void setupAddressStruct(struct sockaddr_in* address, int portNumber) {
+    memset(address, '\0', sizeof(*address));
+    address->sin_family = AF_INET;
+    address->sin_port = htons(portNumber);
+    struct hostent* serverHostInfo = gethostbyname("localhost");
+    if (serverHostInfo == NULL) {
+        error("CLIENT: ERROR, no such host", 2);
+    }
+    memcpy((char*)&address->sin_addr.s_addr, (char*)serverHostInfo->h_addr, serverHostInfo->h_length);
+}
+
+int readFileContents(const char *filename, char **buffer) {
     FILE *f = fopen(filename, "r");
     if (!f) {
-        fprintf(stderr, "Could not open file %s\n", filename);
-        exit(1);
+        fprintf(stderr, "Could not open file %s for reading\n", filename);
+        return -1;
     }
 
     fseek(f, 0, SEEK_END);
@@ -27,78 +35,74 @@ int readFile(const char *filename, char **buffer) {
     fseek(f, 0, SEEK_SET);
 
     *buffer = malloc(length + 1);
-    if (!*buffer) {
-        fprintf(stderr, "Memory allocation failed\n");
-        exit(1);
+    if (*buffer) {
+        fread(*buffer, 1, length, f);
+        (*buffer)[length] = '\0'; 
     }
-
-    fread(*buffer, 1, length, f);
     fclose(f);
-    (*buffer)[length] = '\0';
-
     return length;
 }
 
 int main(int argc, char *argv[]) {
-    int sockfd, portno, n;
-    struct sockaddr_in serv_addr;
-    struct hostent *server;
-
-    char *plaintext;
-    char *key;
-    char buffer[BUFFER_SIZE];
+    int socketFD, portNumber, charsWritten, charsRead;
+    struct sockaddr_in serverAddress;
+    char *plaintextBuffer, *keyBuffer;
+    char response[256]; 
 
     if (argc < 4) {
-       fprintf(stderr,"usage %s plaintext key port\n", argv[0]);
-       exit(0);
+        error("USAGE: enc_client plaintext key port", 1);
     }
 
-    portno = atoi(argv[3]);
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) 
-        error("ERROR opening socket");
-
-    server = gethostbyname("localhost");
-    if (server == NULL) {
-        fprintf(stderr,"ERROR, no such host\n");
-        exit(0);
+    int plaintextLength = readFileContents(argv[1], &plaintextBuffer);
+    if (plaintextLength < 0) {
+        error("Error reading plaintext file", 1);
     }
 
-    bzero((char *) &serv_addr, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr, 
-         (char *)&serv_addr.sin_addr.s_addr,
-         server->h_length);
-    serv_addr.sin_port = htons(portno);
+    int keyLength = readFileContents(argv[2], &keyBuffer);
+    if (keyLength < 0) {
+        free(plaintextBuffer);
+        error("Error reading key file", 1);
+    }
 
-    if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) 
-        error("ERROR connecting");
-
-    // Read plaintext and key from files
-    int plaintextLength = readFile(argv[1], &plaintext);
-    int keyLength = readFile(argv[2], &key);
-
-    // Validate key length
     if (keyLength < plaintextLength) {
-        fprintf(stderr, "Error: key '%s' is too short\n", argv[2]);
-        exit(1);
+        free(plaintextBuffer);
+        free(keyBuffer);
+        error("Error: key is too short", 1);
     }
 
-    // Send plaintext and key to server
-    n = write(sockfd, plaintext, strlen(plaintext));
-    if (n < 0) error("ERROR writing to socket");
-    n = write(sockfd, key, strlen(key));
-    if (n < 0) error("ERROR writing to socket");
+    socketFD = socket(AF_INET, SOCK_STREAM, 0);
+    if (socketFD < 0) {
+        error("CLIENT: ERROR opening socket", 2);
+    }
 
-    // Read ciphertext back from server
-    bzero(buffer, BUFFER_SIZE);
-    n = read(sockfd, buffer, BUFFER_SIZE-1);
-    if (n < 0) error("ERROR reading from socket");
+    setupAddressStruct(&serverAddress, atoi(argv[3]));
 
-    printf("%s\n", buffer);
+    if (connect(socketFD, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
+        error("CLIENT: ERROR connecting", 2);
+    }
 
-    close(sockfd);
-    free(plaintext);
-    free(key);
-    return 0;
+    char *message = malloc(plaintextLength + keyLength + 4);
+    if (message == NULL) {
+        free(plaintextBuffer);
+        free(keyBuffer);
+        error("Error allocating memory for message", 1);
+    }
+    sprintf(message, "%s|||%s", plaintextBuffer, keyBuffer);
+
+    charsWritten = send(socketFD, message, strlen(message), 0);
+    if (charsWritten < 0) error("CLIENT: ERROR writing to socket", 2);
+    if (charsWritten < strlen(message)) printf("CLIENT: WARNING: Not all data written to socket!\n");
+
+    free(plaintextBuffer);
+    free(keyBuffer);
+    free(message);
+
+    memset(response, '\0', sizeof(response));
+    charsRead = recv(socketFD, response, sizeof(response) - 1, 0);
+    if (charsRead < 0) error("CLIENT: ERROR reading from socket", 2);
+
+    printf("%s\n", response); 
+
+    close(socketFD);
+    return 0; 
 }
